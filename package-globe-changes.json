@@ -1,0 +1,6 @@
+{
+  "dependenciesToAdd": [
+    "three",
+    "three-globe"
+  ]
+}
