@@ -28,17 +28,6 @@
   font-size: 0.95rem;
 }
 
-.mode-pill {
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  background: var(--accent-weak);
-  color: var(--accent-ink);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.72rem;
-}
-
 .controls {
   display: flex;
   flex-wrap: wrap;
@@ -110,9 +99,13 @@
     align-items: flex-start;
   }
 
+  .controls {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
   .stats {
     width: 100%;
-    margin-left: 0;
     justify-content: space-between;
   }
 

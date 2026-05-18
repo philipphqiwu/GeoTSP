@@ -11,4 +11,6 @@ export type TspRoute = {
   order: number[]
   closedOrder: number[]
   totalDistanceKm: number
+  bestStartIndex?: number
 }
+
