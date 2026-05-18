@@ -60,6 +60,46 @@
   cursor: not-allowed;
 }
 
+.city-picker {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.city-picker select {
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 0.5rem;
+  background: white;
+  color: var(--ink);
+  font-family: var(--body-font);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.view-buttons {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.view-buttons button {
+  padding: 0.5rem 0.7rem;
+  background: var(--accent-weak);
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.view-buttons button.active {
+  background: var(--accent);
+  color: white;
+}
+
+.view-buttons button:hover:not(.active) {
+  opacity: 0.8;
+}
+
 .stats {
   margin-left: auto;
   display: flex;

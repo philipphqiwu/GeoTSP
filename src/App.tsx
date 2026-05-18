@@ -3,6 +3,7 @@ import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import './App.css'
 import { solveOptimizedTsp } from './lib/tsp'
 import type { IndexedPoint, TspRoute } from './types/geo'
+import { CITY_DATABASE } from './data/cityDatabase'
 
 type MapViewType = 'map' | 'satellite' | 'terrain'
 
@@ -39,6 +40,87 @@ function App() {
     () => points.map(({ lat, lng }) => ({ lat, lng })),
     [points],
   )
+
+  const [countries, setCountries] = useState<Array<{code:string; name:string}>>([
+    { code: 'US', name: 'United States' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'FR', name: 'France' },
+    { code: 'JP', name: 'Japan' },
+  ])
+  const [cities, setCities] = useState<Array<{id:number; name:string; lat:number; lng:number}>>([
+    { id: 1, name: 'New York', lat: 40.7128, lng: -74.0060 },
+    { id: 2, name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
+    { id: 3, name: 'Chicago', lat: 41.8781, lng: -87.6298 },
+    { id: 4, name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
+  ])
+  const [selectedCountry, setSelectedCountry] = useState<string>('US')
+  const [selectedCity, setSelectedCity] = useState<string>('1')
+
+  const ALL_COUNTRIES = [
+    { code: 'US', name: 'United States' },
+    { code: 'GB', name: 'United Kingdom' },
+    { code: 'FR', name: 'France' },
+    { code: 'DE', name: 'Germany' },
+    { code: 'IT', name: 'Italy' },
+    { code: 'ES', name: 'Spain' },
+    { code: 'JP', name: 'Japan' },
+    { code: 'CN', name: 'China' },
+    { code: 'IN', name: 'India' },
+    { code: 'BR', name: 'Brazil' },
+    { code: 'CA', name: 'Canada' },
+    { code: 'AU', name: 'Australia' },
+    { code: 'MX', name: 'Mexico' },
+    { code: 'KR', name: 'South Korea' },
+    { code: 'RU', name: 'Russia' },
+    { code: 'NL', name: 'Netherlands' },
+    { code: 'SE', name: 'Sweden' },
+    { code: 'CH', name: 'Switzerland' },
+    { code: 'NZ', name: 'New Zealand' },
+    { code: 'SG', name: 'Singapore' },
+    { code: 'HK', name: 'Hong Kong' },
+    { code: 'AE', name: 'United Arab Emirates' },
+    { code: 'TH', name: 'Thailand' },
+    { code: 'ID', name: 'Indonesia' },
+    { code: 'MY', name: 'Malaysia' },
+    { code: 'PH', name: 'Philippines' },
+    { code: 'VN', name: 'Vietnam' },
+    { code: 'TR', name: 'Turkey' },
+    { code: 'SA', name: 'Saudi Arabia' },
+    { code: 'AR', name: 'Argentina' },
+    { code: 'CL', name: 'Chile' },
+    { code: 'CO', name: 'Colombia' },
+    { code: 'PE', name: 'Peru' },
+    { code: 'ZA', name: 'South Africa' },
+    { code: 'EG', name: 'Egypt' },
+    { code: 'NG', name: 'Nigeria' },
+    { code: 'KE', name: 'Kenya' },
+    { code: 'GR', name: 'Greece' },
+    { code: 'PT', name: 'Portugal' },
+    { code: 'PL', name: 'Poland' },
+    { code: 'BE', name: 'Belgium' },
+    { code: 'AT', name: 'Austria' },
+    { code: 'CZ', name: 'Czech Republic' },
+    { code: 'DK', name: 'Denmark' },
+    { code: 'FI', name: 'Finland' },
+    { code: 'NO', name: 'Norway' },
+    { code: 'IE', name: 'Ireland' },
+    { code: 'IL', name: 'Israel' },
+    { code: 'PS', name: 'Palestine' },
+  ]
+
+  useEffect(() => {
+    // Use local comprehensive countries list (reference data, not hardcoded city data)
+    setCountries(ALL_COUNTRIES)
+  }, [])
+
+  // When the selected country changes, update cities from database
+  useEffect(() => {
+    if (!selectedCountry) return
+    
+    const cities = CITY_DATABASE[selectedCountry] || CITY_DATABASE['US'] || []
+    setCities(cities)
+    if (cities.length > 0) setSelectedCity(String(cities[0].id))
+  }, [selectedCountry])
 
   useEffect(() => {
     if (mapRef.current) {
@@ -187,6 +269,29 @@ function App() {
         <button type="button" onClick={handleClear} disabled={points.length === 0}>
           Clear All
         </button>
+
+        <div className="city-picker">
+          <select value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)}>
+            {countries.map((c) => (
+              <option key={c.code} value={c.code}>{c.name}</option>
+            ))}
+          </select>
+          <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
+            {cities.map((c) => (
+              <option key={c.id} value={String(c.id)}>{c.name}</option>
+            ))}
+          </select>
+          <button type="button" onClick={() => {
+            const city = cities.find((c) => String(c.id) === selectedCity)
+            if (!city) return
+            setPoints((current) => {
+              const point = { id: nextIdRef.current, lat: city.lat, lng: city.lng }
+              nextIdRef.current += 1
+              return [...current, point]
+            })
+            setRoute(null)
+          }}>📍 Add City</button>
+        </div>
 
         <div className="view-buttons">
           {(['map', 'satellite', 'terrain'] as MapViewType[]).map((view) => (
