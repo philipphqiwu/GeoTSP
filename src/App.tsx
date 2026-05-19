@@ -3,6 +3,9 @@ import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import './App.css'
 import { solveOptimizedTsp } from './lib/tsp'
 import type { IndexedPoint, TspRoute } from './types/geo'
+import TspLoader from './components/TspLoader'
+import TspExporter from './components/TspExporter'
+import type { TspResult } from './lib/tspLoader'
 import { CITY_DATABASE } from './data/cityDatabase'
 
 type MapViewType = 'map' | 'satellite' | 'terrain'
@@ -250,6 +253,50 @@ function App() {
     setRoute(null)
   }
 
+  const handleTspParsed = (result: TspResult) => {
+    // Detect whether parsed coords look like geographic degrees.
+    const xs = result.positions.map((p) => p.x)
+    const ys = result.positions.map((p) => p.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+
+    const looksLikeDegrees = (valX: number, valY: number) => {
+      // lat in [-90,90], lng in [-180,180]
+      return valY >= -90 && valY <= 90 && valX >= -180 && valX <= 180
+    }
+
+    let mapped: { x: number; y: number }[] = result.positions
+
+    if (!looksLikeDegrees(xs[0], ys[0]) || xs.some((v) => Math.abs(v) > 180) || ys.some((v) => Math.abs(v) > 90)) {
+      // Treat as planar coordinates (e.g., TSPLIB EUC_2D). Map to a reasonable Berlin bbox.
+      const latMin = 52.30
+      const latMax = 52.80
+      const lngMin = 13.00
+      const lngMax = 13.80
+
+      const spanX = maxX - minX || 1
+      const spanY = maxY - minY || 1
+
+      mapped = result.positions.map((p) => ({
+        x: lngMin + ((p.x - minX) / spanX) * (lngMax - lngMin),
+        y: latMin + ((p.y - minY) / spanY) * (latMax - latMin),
+      }))
+      // Informative console message; keep UI unobtrusive
+      console.info('TSP loader: planar coordinates detected and normalized to Berlin bbox')
+    } else {
+      // Likely already degrees: map x=>lng, y=>lat
+      mapped = result.positions.map((p) => ({ x: p.x, y: p.y }))
+    }
+
+    setPoints((current) => {
+      const pts = mapped.map((p) => ({ id: nextIdRef.current++, lat: p.y, lng: p.x }))
+      return [...current, ...pts]
+    })
+    setRoute(null)
+  }
+
   return (
     <main className="app-shell">
       <header className="top-bar">
@@ -292,6 +339,9 @@ function App() {
             setRoute(null)
           }}>📍 Add City</button>
         </div>
+
+        <TspLoader onParse={handleTspParsed} />
+        <TspExporter points={points} />
 
         <div className="view-buttons">
           {(['map', 'satellite', 'terrain'] as MapViewType[]).map((view) => (
