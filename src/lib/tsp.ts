@@ -117,20 +117,36 @@ export const solveOptimizedTsp = (
   points: LatLng[],
   distanceFn: DistanceFn = haversineDistanceKm,
   maxIterations = 1000,
+  maxStarts?: number,
 ): TspRoute | null => {
   if (points.length < 2) {
     return null
   }
 
+  // Determine which start indices to try. If maxStarts is provided and smaller
+  // than the number of points, sample start indices evenly to limit runtime.
+  const n = points.length
+  let startIndices: number[] = []
+  if (!maxStarts || maxStarts >= n) {
+    startIndices = Array.from({ length: n }, (_, i) => i)
+  } else {
+    const step = n / maxStarts
+    for (let i = 0; i < maxStarts; i += 1) {
+      startIndices.push(Math.floor(i * step))
+    }
+    // Ensure last index included
+    if (startIndices[startIndices.length - 1] !== n - 1) {
+      startIndices.push(n - 1)
+    }
+  }
+
   let bestRoute: TspRoute | null = null
   let bestStartIndex = 0
 
-  for (let startIndex = 0; startIndex < points.length; startIndex += 1) {
+  for (const startIndex of startIndices) {
     const initialRoute = solveNearestNeighborTsp(points, startIndex, distanceFn)
 
-    if (!initialRoute) {
-      continue
-    }
+    if (!initialRoute) continue
 
     const improvedOrder = improve2OptTsp(
       initialRoute.order,

@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import './App.css'
-import { solveOptimizedTsp } from './lib/tsp'
+import { solveOptimizedTsp, solveNearestNeighborTsp } from './lib/tsp'
 import type { IndexedPoint, TspRoute } from './types/geo'
-import TspLoader from './components/TspLoader'
-import TspExporter from './components/TspExporter'
-import type { TspResult } from './lib/tspLoader'
-import { CITY_DATABASE } from './data/cityDatabase'
+import { PRESETS } from './lib/presets'
 
 type MapViewType = 'map' | 'satellite' | 'terrain'
 
@@ -44,86 +41,16 @@ function App() {
     [points],
   )
 
-  const [countries, setCountries] = useState<Array<{code:string; name:string}>>([
-    { code: 'US', name: 'United States' },
-    { code: 'GB', name: 'United Kingdom' },
-    { code: 'FR', name: 'France' },
-    { code: 'JP', name: 'Japan' },
-  ])
-  const [cities, setCities] = useState<Array<{id:number; name:string; lat:number; lng:number}>>([
-    { id: 1, name: 'New York', lat: 40.7128, lng: -74.0060 },
-    { id: 2, name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
-    { id: 3, name: 'Chicago', lat: 41.8781, lng: -87.6298 },
-    { id: 4, name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
-  ])
-  const [selectedCountry, setSelectedCountry] = useState<string>('US')
-  const [selectedCity, setSelectedCity] = useState<string>('1')
-
-  const ALL_COUNTRIES = [
-    { code: 'US', name: 'United States' },
-    { code: 'GB', name: 'United Kingdom' },
-    { code: 'FR', name: 'France' },
-    { code: 'DE', name: 'Germany' },
-    { code: 'IT', name: 'Italy' },
-    { code: 'ES', name: 'Spain' },
-    { code: 'JP', name: 'Japan' },
-    { code: 'CN', name: 'China' },
-    { code: 'IN', name: 'India' },
-    { code: 'BR', name: 'Brazil' },
-    { code: 'CA', name: 'Canada' },
-    { code: 'AU', name: 'Australia' },
-    { code: 'MX', name: 'Mexico' },
-    { code: 'KR', name: 'South Korea' },
-    { code: 'RU', name: 'Russia' },
-    { code: 'NL', name: 'Netherlands' },
-    { code: 'SE', name: 'Sweden' },
-    { code: 'CH', name: 'Switzerland' },
-    { code: 'NZ', name: 'New Zealand' },
-    { code: 'SG', name: 'Singapore' },
-    { code: 'HK', name: 'Hong Kong' },
-    { code: 'AE', name: 'United Arab Emirates' },
-    { code: 'TH', name: 'Thailand' },
-    { code: 'ID', name: 'Indonesia' },
-    { code: 'MY', name: 'Malaysia' },
-    { code: 'PH', name: 'Philippines' },
-    { code: 'VN', name: 'Vietnam' },
-    { code: 'TR', name: 'Turkey' },
-    { code: 'SA', name: 'Saudi Arabia' },
-    { code: 'AR', name: 'Argentina' },
-    { code: 'CL', name: 'Chile' },
-    { code: 'CO', name: 'Colombia' },
-    { code: 'PE', name: 'Peru' },
-    { code: 'ZA', name: 'South Africa' },
-    { code: 'EG', name: 'Egypt' },
-    { code: 'NG', name: 'Nigeria' },
-    { code: 'KE', name: 'Kenya' },
-    { code: 'GR', name: 'Greece' },
-    { code: 'PT', name: 'Portugal' },
-    { code: 'PL', name: 'Poland' },
-    { code: 'BE', name: 'Belgium' },
-    { code: 'AT', name: 'Austria' },
-    { code: 'CZ', name: 'Czech Republic' },
-    { code: 'DK', name: 'Denmark' },
-    { code: 'FI', name: 'Finland' },
-    { code: 'NO', name: 'Norway' },
-    { code: 'IE', name: 'Ireland' },
-    { code: 'IL', name: 'Israel' },
-    { code: 'PS', name: 'Palestine' },
-  ]
+  const [solveMode, setSolveMode] = useState<'optimal' | 'single'>('optimal')
+  const [startIndex, setStartIndex] = useState(0)
 
   useEffect(() => {
-    // Use local comprehensive countries list (reference data, not hardcoded city data)
-    setCountries(ALL_COUNTRIES)
-  }, [])
+    if (startIndex >= points.length) {
+      setStartIndex(Math.max(0, points.length - 1))
+    }
+  }, [points, startIndex])
 
-  // When the selected country changes, update cities from database
-  useEffect(() => {
-    if (!selectedCountry) return
-    
-    const cities = CITY_DATABASE[selectedCountry] || CITY_DATABASE['US'] || []
-    setCities(cities)
-    if (cities.length > 0) setSelectedCity(String(cities[0].id))
-  }, [selectedCountry])
+
 
   useEffect(() => {
     if (mapRef.current) {
@@ -184,29 +111,26 @@ function App() {
 
   // Update markers and route visualization
   useEffect(() => {
-    if (!markerLayerRef.current || !routeLayerRef.current) {
-      return
-    }
+    if (!markerLayerRef.current || !routeLayerRef.current) return
 
     markerLayerRef.current.clearLayers()
     routeLayerRef.current.clearLayers()
 
     // Draw user-placed markers
-    points.forEach((point) => {
-      const isOptimalStart = route && route.bestStartIndex === points.findIndex((p) => p.id === point.id)
+    points.forEach((point, index) => {
+      const isOptimalStart = route && route.bestStartIndex === index && solveMode === 'optimal'
+      const isSelectedStart = solveMode === 'single' && startIndex === index
+
       const marker = L.circleMarker([point.lat, point.lng], {
-        color: isOptimalStart ? '#ffd700' : '#d64550',
-        fillColor: isOptimalStart ? '#ffed4e' : '#ff5e5b',
-        fillOpacity: 0.85,
-        weight: isOptimalStart ? 3 : 2,
-        radius: isOptimalStart ? 9 : 7,
+        color: isOptimalStart ? '#ffd700' : isSelectedStart ? '#1e88ff' : '#d64550',
+        fillColor: isOptimalStart ? '#ffed4e' : isSelectedStart ? '#7fbfff' : '#ff5e5b',
+        fillOpacity: 0.9,
+        weight: isOptimalStart ? 3 : isSelectedStart ? 3 : 2,
+        radius: isOptimalStart ? 9 : isSelectedStart ? 9 : 7,
       })
         .bindTooltip(
-          `${isOptimalStart ? '⭐ Optimal Start: ' : ''}P${point.id}: ${point.lat.toFixed(3)}, ${point.lng.toFixed(3)}\n(right-click to remove)`,
-          {
-            direction: 'top',
-            offset: [0, -8],
-          },
+          `${isOptimalStart ? '⭐ Optimal Start: ' : isSelectedStart ? '▶ Start: ' : ''}P${point.id}: ${point.lat.toFixed(3)}, ${point.lng.toFixed(3)}\n(right-click to remove)`,
+          { direction: 'top', offset: [0, -8] },
         )
         .addTo(markerLayerRef.current as L.LayerGroup)
 
@@ -233,8 +157,27 @@ function App() {
   }, [points, route])
 
   const handleSolve = () => {
-    const result = solveOptimizedTsp(pointCoordinates)
-    setRoute(result)
+    if (solveMode === 'optimal') {
+      const N = pointCoordinates.length
+      if (N > 300) {
+        const proceedFull = window.confirm(
+          `Running multi-start on ${N} points may be very slow. OK = run full (all starts). Cancel = run limited (100 starts).`
+        )
+        if (proceedFull) {
+          const result = solveOptimizedTsp(pointCoordinates)
+          setRoute(result)
+        } else {
+          const result = solveOptimizedTsp(pointCoordinates, undefined, 1000, 100)
+          setRoute(result)
+        }
+      } else {
+        const result = solveOptimizedTsp(pointCoordinates)
+        setRoute(result)
+      }
+    } else {
+      const result = solveNearestNeighborTsp(pointCoordinates, startIndex)
+      setRoute(result)
+    }
   }
 
   const handleClear = () => {
@@ -253,45 +196,9 @@ function App() {
     setRoute(null)
   }
 
-  const handleTspParsed = (result: TspResult) => {
-    // Detect whether parsed coords look like geographic degrees.
-    const xs = result.positions.map((p) => p.x)
-    const ys = result.positions.map((p) => p.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-
-    const looksLikeDegrees = (valX: number, valY: number) => {
-      // lat in [-90,90], lng in [-180,180]
-      return valY >= -90 && valY <= 90 && valX >= -180 && valX <= 180
-    }
-
-    let mapped: { x: number; y: number }[] = result.positions
-
-    if (!looksLikeDegrees(xs[0], ys[0]) || xs.some((v) => Math.abs(v) > 180) || ys.some((v) => Math.abs(v) > 90)) {
-      // Treat as planar coordinates (e.g., TSPLIB EUC_2D). Map to a reasonable Berlin bbox.
-      const latMin = 52.30
-      const latMax = 52.80
-      const lngMin = 13.00
-      const lngMax = 13.80
-
-      const spanX = maxX - minX || 1
-      const spanY = maxY - minY || 1
-
-      mapped = result.positions.map((p) => ({
-        x: lngMin + ((p.x - minX) / spanX) * (lngMax - lngMin),
-        y: latMin + ((p.y - minY) / spanY) * (latMax - latMin),
-      }))
-      // Informative console message; keep UI unobtrusive
-      console.info('TSP loader: planar coordinates detected and normalized to Berlin bbox')
-    } else {
-      // Likely already degrees: map x=>lng, y=>lat
-      mapped = result.positions.map((p) => ({ x: p.x, y: p.y }))
-    }
-
+  const handleLoadPreset = (presetPoints: Array<{lat: number; lng: number}>) => {
     setPoints((current) => {
-      const pts = mapped.map((p) => ({ id: nextIdRef.current++, lat: p.y, lng: p.x }))
+      const pts = presetPoints.map((p) => ({ id: nextIdRef.current++, lat: p.lat, lng: p.lng }))
       return [...current, ...pts]
     })
     setRoute(null)
@@ -317,31 +224,38 @@ function App() {
           Clear All
         </button>
 
-        <div className="city-picker">
-          <select value={selectedCountry} onChange={(e) => setSelectedCountry(e.target.value)}>
-            {countries.map((c) => (
-              <option key={c.code} value={c.code}>{c.name}</option>
-            ))}
+        <div className="solve-mode">
+          <label htmlFor="solveMode">Mode:</label>
+          <select id="solveMode" value={solveMode} onChange={(e) => setSolveMode(e.target.value as 'optimal' | 'single')}>
+            <option value="optimal">Optimal (multi-start)</option>
+            <option value="single">Single-start</option>
           </select>
-          <select value={selectedCity} onChange={(e) => setSelectedCity(e.target.value)}>
-            {cities.map((c) => (
-              <option key={c.id} value={String(c.id)}>{c.name}</option>
-            ))}
-          </select>
-          <button type="button" onClick={() => {
-            const city = cities.find((c) => String(c.id) === selectedCity)
-            if (!city) return
-            setPoints((current) => {
-              const point = { id: nextIdRef.current, lat: city.lat, lng: city.lng }
-              nextIdRef.current += 1
-              return [...current, point]
-            })
-            setRoute(null)
-          }}>📍 Add City</button>
+          {solveMode === 'single' && points.length > 0 && (
+            <select value={String(startIndex)} onChange={(e) => setStartIndex(Number(e.target.value))}>
+              {points.map((p, i) => (
+                <option key={p.id} value={i}>P{p.id}</option>
+              ))}
+            </select>
+          )}
         </div>
 
-        <TspLoader onParse={handleTspParsed} />
-        <TspExporter points={points} />
+        <div className="preset-select">
+          <label htmlFor="preset">Load preset:</label>
+          <select
+            id="preset"
+            onChange={(e) => {
+              const id = e.target.value
+              const preset = PRESETS.find((p) => p.id === id)
+              if (preset) handleLoadPreset(preset.points)
+            }}
+            defaultValue=""
+          >
+            <option value="" disabled>Choose a preset…</option>
+            {PRESETS.map((preset) => (
+              <option key={preset.id} value={preset.id}>{preset.name}</option>
+            ))}
+          </select>
+        </div>
 
         <div className="view-buttons">
           {(['map', 'satellite', 'terrain'] as MapViewType[]).map((view) => (
