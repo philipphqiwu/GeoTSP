@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L, { type LeafletMouseEvent, type Map as LeafletMap } from 'leaflet'
 import './App.css'
-import { solveOptimizedTsp, solveNearestNeighborTsp } from './lib/tsp'
+import { solveOptimizedTsp, solveNearestNeighborTsp, solveLKTsp } from './lib/tsp'
 import type { IndexedPoint, TspRoute } from './types/geo'
 import { PRESETS } from './lib/presets'
 
@@ -43,6 +43,7 @@ function App() {
 
   const [solveMode, setSolveMode] = useState<'optimal' | 'single'>('optimal')
   const [startIndex, setStartIndex] = useState(0)
+  const [algorithm, setAlgorithm] = useState<'optimized' | 'lin-kernighan'>('optimized')
 
   useEffect(() => {
     if (startIndex >= points.length) {
@@ -157,8 +158,15 @@ function App() {
   }, [points, route])
 
   const handleSolve = () => {
+    const N = pointCoordinates.length
+
+    if (algorithm === 'lin-kernighan') {
+      const result = solveLKTsp(pointCoordinates)
+      setRoute(result)
+      return
+    }
+
     if (solveMode === 'optimal') {
-      const N = pointCoordinates.length
       if (N > 300) {
         const proceedFull = window.confirm(
           `Running multi-start on ${N} points may be very slow. OK = run full (all starts). Cancel = run limited (100 starts).`
@@ -237,6 +245,14 @@ function App() {
               ))}
             </select>
           )}
+        </div>
+
+        <div className="algorithm-select">
+          <label htmlFor="algorithm">Algorithm:</label>
+          <select id="algorithm" value={algorithm} onChange={(e) => setAlgorithm(e.target.value as 'optimized' | 'lin-kernighan')}>
+            <option value="optimized">Multi-start NN + 2-opt</option>
+            <option value="lin-kernighan">Lin-Kernighan</option>
+          </select>
         </div>
 
         <div className="preset-select">

@@ -3,7 +3,7 @@ import type { LatLng, TspRoute } from '../types/geo'
 
 type DistanceFn = (from: LatLng, to: LatLng) => number
 
-const calculateTourDistance = (
+export const calculateTourDistance = (
   order: number[],
   points: LatLng[],
   distanceFn: DistanceFn = haversineDistanceKm,
@@ -173,4 +173,104 @@ export const solveOptimizedTsp = (
   }
 
   return bestRoute
+}
+
+
+export const solveLKTsp = (
+  points: LatLng[],
+  options?: {
+    maxIterations?: number
+  },
+  distanceFn: DistanceFn = haversineDistanceKm,
+): TspRoute | null => {
+  if (points.length < 2) return null
+
+  const n = points.length
+  const maxIterations = options?.maxIterations ?? Math.min(n * 150, 100000)
+
+  // Start with nearest neighbor seed, then apply aggressive 2-opt and 3-opt
+  const seed = solveNearestNeighborTsp(points, 0, distanceFn)
+  let bestOrder = seed ? seed.order.slice() : Array.from({ length: n }, (_, i) => i)
+  let bestDist = calculateTourDistance(bestOrder, points, distanceFn)
+
+  let improved = true
+  let iteration = 0
+
+  // Main LK loop: iteratively apply 2-opt and 3-opt moves
+  while (improved && iteration < maxIterations) {
+    improved = false
+    iteration += 1
+
+    // Phase 1: Aggressive 2-opt passes
+    for (let i = 0; i < n - 1; i += 1) {
+      for (let j = i + 2; j < n; j += 1) {
+        const a = bestOrder[i]
+        const b = bestOrder[i + 1]
+        const c = bestOrder[j]
+        const d = bestOrder[(j + 1) % n]
+
+        const distBefore = distanceFn(points[a], points[b]) + distanceFn(points[c], points[d])
+        const distAfter = distanceFn(points[a], points[c]) + distanceFn(points[b], points[d])
+
+        if (distAfter < distBefore - 0.0001) {
+          // Perform 2-opt reversal
+          bestOrder = [
+            ...bestOrder.slice(0, i + 1),
+            ...bestOrder.slice(i + 1, j + 1).reverse(),
+            ...bestOrder.slice(j + 1),
+          ]
+          bestDist = calculateTourDistance(bestOrder, points, distanceFn)
+          improved = true
+        }
+      }
+    }
+
+    // Phase 2: 3-opt moves (Or-opt: move a sequence of 1-3 cities to another position)
+    if (!improved) {
+      for (let i = 0; i < n && !improved; i += 1) {
+        for (let seqLen = 1; seqLen <= 3 && i + seqLen < n && !improved; seqLen += 1) {
+          for (let j = 0; j < n; j += 1) {
+            if (j >= i && j <= i + seqLen) continue // Skip overlapping positions
+
+            // Extract sequence from [i, i+seqLen) and insert after j
+            const sequence = bestOrder.slice(i, i + seqLen)
+            const newOrder = [
+              ...bestOrder.slice(0, i),
+              ...bestOrder.slice(i + seqLen, j < i ? j : j + 1),
+              ...(j < i ? [] : []),
+              ...sequence,
+              ...(j >= i ? bestOrder.slice(j + 1) : bestOrder.slice(j)),
+            ]
+
+            // Ensure we have valid tour
+            if (newOrder.length !== n) continue
+
+            const newDist = calculateTourDistance(newOrder, points, distanceFn)
+            if (newDist < bestDist - 0.0001) {
+              bestOrder = newOrder
+              bestDist = newDist
+              improved = true
+            }
+          }
+        }
+      }
+    }
+
+    // Restart 2-opt if any improvement was made
+    if (improved && iteration < maxIterations * 0.5) {
+      // Do targeted 2-opt around recent changes
+      const reapplyOrder = improve2OptTsp(bestOrder, points, 100, distanceFn)
+      const reapplyDist = calculateTourDistance(reapplyOrder, points, distanceFn)
+      if (reapplyDist < bestDist) {
+        bestOrder = reapplyOrder
+        bestDist = reapplyDist
+      }
+    }
+  }
+
+  return {
+    order: bestOrder,
+    closedOrder: [...bestOrder, bestOrder[0]],
+    totalDistanceKm: bestDist,
+  }
 }
